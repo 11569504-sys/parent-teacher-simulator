@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>親師溝通情境模擬練習器</title>
+<style>
+:root{--blue:#3978bd;--deep:#244b76;--pale:#edf5ff;--bg:#f5f8fc;--text:#26384c;--muted:#687b91;--line:#dce6f2;--white:#fff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif;line-height:1.65}
+header{background:linear-gradient(135deg,#dcecff,#f6f9ff);padding:32px 18px;text-align:center;border-bottom:1px solid var(--line)}
+.brand{font-size:36px} h1{margin:5px 0;color:var(--deep);font-size:clamp(24px,4vw,34px)}
+header p{margin:6px 0 0;color:#5b7592}
+main{max-width:1120px;margin:24px auto;padding:0 16px 36px;display:grid;grid-template-columns:320px minmax(0,1fr);gap:20px}
+.panel{background:var(--white);border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:0 5px 18px #244b7608}
+h2{font-size:19px;color:var(--deep);margin:0 0 14px}
+label{display:block;font-weight:700;font-size:14px;margin:14px 0 6px}
+select,textarea,input{font:inherit;width:100%;border:1px solid #cddbea;border-radius:10px;padding:11px 12px;background:#fff;color:var(--text)}
+select:focus,textarea:focus{outline:2px solid #b7d7fb;border-color:var(--blue)}
+button{font:inherit;border:0;border-radius:10px;padding:11px 15px;cursor:pointer;font-weight:700}
+.primary{background:var(--blue);color:white;width:100%;margin-top:16px}
+.primary:hover{background:#2d659f}
+.secondary{background:#eaf2fc;color:var(--deep)}
+button:disabled{opacity:.55;cursor:wait}
+.hint{font-size:12px;color:var(--muted);margin-top:10px}
+.chathead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.status{font-size:12px;color:#4d6e91;background:#edf5ff;padding:5px 9px;border-radius:999px}
+.chat{min-height:300px;max-height:480px;overflow:auto;background:#f8fbff;border:1px solid var(--line);border-radius:14px;padding:14px}
+.welcome{text-align:center;color:var(--muted);padding:48px 12px}
+.msg{max-width:88%;padding:12px 14px;border-radius:14px;margin:10px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.parent{background:#fff;border:1px solid var(--line);border-top-left-radius:4px}
+.teacher{background:#e4f1ff;border:1px solid #c8e1fc;margin-left:auto;border-top-right-radius:4px}
+.system{font-size:13px;color:var(--muted);text-align:center;margin:12px 0}
+.composer{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:12px;align-items:end}
+.composer textarea{resize:vertical;min-height:90px}
+.composer button{height:46px}
+.analysis{margin-top:18px}
+.analysis-content{white-space:pre-wrap;font-size:14px}
+.hidden{display:none!important}
+footer{text-align:center;color:#8190a3;font-size:12px;padding:0 16px 24px}
+@media(max-width:800px){main{grid-template-columns:1fr}.chat{min-height:260px;max-height:55vh}}
+@media(max-width:480px){.panel{padding:15px}.composer{grid-template-columns:1fr}.composer button{width:100%}.msg{max-width:96%}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">🤝</div>
+  <h1>親師溝通情境模擬練習器</h1>
+  <p>練習理解家長需求、清楚表達與建立專業界線</p>
+</header>
+<main>
+  <aside class="panel">
+    <h2>設定練習情境</h2>
+    <label for="scenario">選擇親師溝通情境</label>
+    <select id="scenario">
+      <option value="家長質疑孩子受到不公平對待">家長質疑孩子受到不公平對待</option>
+      <option value="家長不滿孩子的學習成績">家長不滿孩子的學習成績</option>
+      <option value="家長反映孩子與同學發生衝突">家長反映孩子與同學發生衝突</option>
+      <option value="家長要求老師給予特殊待遇">家長要求老師給予特殊待遇</option>
+      <option value="家長認為老師的訊息語氣不佳">家長認為老師的訊息語氣不佳</option>
+      <option value="家長對作業份量或規定有意見">家長對作業份量或規定有意見</option>
+      <option value="家長擔心孩子在班上被忽略">家長擔心孩子在班上被忽略</option>
+      <option value="自訂情境">自訂情境</option>
+    </select>
+    <div id="customWrap" class="hidden">
+      <label for="customScenario">描述自訂情境</label>
+      <textarea id="customScenario" rows="3" placeholder="例如：家長希望老師每天單獨提醒孩子帶作業"></textarea>
+    </div>
+    <label for="tone">練習目標</label>
+    <select id="tone">
+      <option value="同理關懷">同理關懷</option>
+      <option value="理性溫和">理性溫和</option>
+      <option value="專業且有界線">專業且有界線</option>
+      <option value="化解衝突">化解衝突</option>
+    </select>
+    <label for="level">家長情緒程度</label>
+    <select id="level">
+      <option value="一般">一般</option>
+      <option value="有些不滿">有些不滿</option>
+      <option value="情緒激動">情緒激動</option>
+    </select>
+    <button id="startBtn" class="primary">開始情境模擬</button>
+    <button id="resetBtn" class="secondary" style="width:100%;margin-top:9px">重新開始</button>
+    <p class="hint">建議使用虛構情境，不要輸入學生姓名、電話、診斷或其他可識別個資。</p>
+  </aside>
+
+  <section>
+    <div class="panel">
+      <div class="chathead">
+        <h2 style="margin:0">對話練習</h2>
+        <span id="status" class="status">尚未開始</span>
+      </div>
+      <div id="chat" class="chat" aria-live="polite">
+        <div class="welcome">👋 選擇情境後，按「開始情境模擬」。<br>AI 將扮演家長，你可以練習回覆。</div>
+      </div>
+      <div class="composer">
+        <textarea id="reply" placeholder="輸入你會如何回覆家長……" disabled></textarea>
+        <button id="sendBtn" class="primary" style="width:auto;min-width:120px;margin:0" disabled>送出回覆</button>
+      </div>
+      <div class="hint">每次回覆後，AI 會繼續扮演家長；你也可以隨時結束對話並取得分析。</div>
+      <button id="analyzeBtn" class="secondary" style="width:100%;margin-top:12px" disabled>結束對話並分析我的表現</button>
+    </div>
+    <div id="analysisPanel" class="panel analysis hidden">
+      <h2>溝通回饋與建議</h2>
+      <div id="analysis" class="analysis-content"></div>
+      <button id="againBtn" class="secondary" style="margin-top:14px">練習另一個情境</button>
+    </div>
+  </section>
+</main>
+<footer>親師溝通情境模擬練習器｜AI 回饋僅供練習參考，實際處理請依學校規範與事實查證。</footer>
+<script>
+const $ = id => document.getElementById(id);
+let history = [];
+let started = false;
+let busy = false;
+$("scenario").addEventListener("change", () => $("customWrap").classList.toggle("hidden", $("scenario").value !== "自訂情境"));
+function currentScenario(){
+  if ($("scenario").value === "自訂情境") return $("customScenario").value.trim() || "家長對孩子在學校的學習或生活情況有所疑慮";
+  return $("scenario").value;
+}
+function addMessage(role, text){
+  const chat = $("chat");
+  const node = document.createElement("div");
+  node.className = "msg " + (role === "parent" ? "parent" : "teacher");
+  node.textContent = (role === "parent" ? "家長：" : "老師：") + text;
+  chat.appendChild(node);
+  chat.scrollTop = chat.scrollHeight;
+}
+function setBusy(value){
+  busy = value;
+  $("startBtn").disabled = value;
+  $("sendBtn").disabled = value || !started;
+  $("analyzeBtn").disabled = value || !started || history.filter(x => x.role === "teacher").length === 0;
+  $("reply").disabled = value || !started;
+  $("status").textContent = value ? "AI 思考中…" : started ? "模擬進行中" : "尚未開始";
+}
+async function api(action, extra={}){
+  const res = await fetch("/api/simulate", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({action, scenario:currentScenario(), tone:$("tone").value, level:$("level").value, history, ...extra})
+  });
+  const data = await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error(data.error || "請求失敗，請稍後再試。");
+  return data;
+}
+$("startBtn").addEventListener("click", async () => {
+  if (busy) return;
+  if ($("scenario").value === "自訂情境" && !$("customScenario").value.trim()) {
+    alert("請先描述自訂情境。"); return;
+  }
+  history = []; started = false;
+  $("chat").innerHTML = "";
+  $("analysisPanel").classList.add("hidden");
+  setBusy(true);
+  try {
+    const data = await api("start");
+    history.push({role:"parent", content:data.message});
+    addMessage("parent", data.message);
+    started = true;
+    $("reply").focus();
+  } catch(e) {
+    $("chat").innerHTML = '<div class="system"></div>';
+    $("chat").firstChild.textContent = e.message;
+  } finally { setBusy(false); }
+});
+async function sendReply(){
+  const text = $("reply").value.trim();
+  if (!text || !started || busy) return;
+  history.push({role:"teacher", content:text});
+  addMessage("teacher", text);
+  $("reply").value = "";
+  setBusy(true);
+  try {
+    const data = await api("reply");
+    history.push({role:"parent", content:data.message});
+    addMessage("parent", data.message);
+  } catch(e) {
+    const err = document.createElement("div");
+    err.className="system"; err.textContent=e.message+"（你的回覆已保留在畫面中，請稍後再試。）";
+    $("chat").appendChild(err);
+  } finally { setBusy(false); }
+}
+$("sendBtn").addEventListener("click", sendReply);
+$("reply").addEventListener("keydown", e => { if(e.key==="Enter" && !e.shiftKey){e.preventDefault();sendReply();} });
+$("analyzeBtn").addEventListener("click", async () => {
+  if (busy || !history.some(x=>x.role==="teacher")) return;
+  setBusy(true);
+  $("analysisPanel").classList.remove("hidden");
+  $("analysis").textContent = "正在整理回饋……";
+  try {
+    const data = await api("analyze");
+    $("analysis").textContent = data.analysis;
+    $("analysisPanel").scrollIntoView({behavior:"smooth",block:"start"});
+    $("status").textContent = "分析完成";
+    started = false;
+    $("reply").disabled = true;
+    $("sendBtn").disabled = true;
+    $("analyzeBtn").disabled = true;
+  } catch(e) {
+    $("analysis").textContent = e.message;
+  } finally { setBusy(false); }
+});
+function resetAll(){
+  history=[];started=false;busy=false;
+  $("chat").innerHTML='<div class="welcome">👋 選擇情境後，按「開始情境模擬」。<br>AI 將扮演家長，你可以練習回覆。</div>';
+  $("reply").value="";$("reply").disabled=true;$("sendBtn").disabled=true;$("analyzeBtn").disabled=true;
+  $("status").textContent="尚未開始";$("analysisPanel").classList.add("hidden");
+  $("startBtn").disabled=false;
+}
+$("resetBtn").addEventListener("click",resetAll);
+$("againBtn").addEventListener("click",resetAll);
+</script>
+</body>
+</html>
