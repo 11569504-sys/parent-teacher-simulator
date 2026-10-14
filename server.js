@@ -1,88 +1,223 @@
-require("dotenv").config();
+
 const express = require("express");
 const path = require("path");
-const { GoogleGenAI } = require("@google/genai");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Groq API 設定
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-20b";
+
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
-const ai = process.env.GEMINI_API_KEY
-  ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
-  : null;
-
-app.post("/api/simulate", async (req, res) => {
-  try {
-    if (!ai) {
-      return res.status(500).json({
-        error: "伺服器尚未設定 GEMINI_API_KEY。請在 Render 的 Environment 設定 Gemini API 金鑰。"
-      });
-    }
-
-    const { action, scenario, tone, level, history = [] } = req.body || {};
-    if (!["start", "reply", "analyze"].includes(action)) {
-      return res.status(400).json({ error: "不支援的操作。" });
-    }
-
-    const system = `你是一位協助國小教師練習親師溝通的情境模擬教練。全程使用繁體中文（台灣用語）。
-目標情境：${scenario}
-教師練習目標：${tone}
-家長情緒程度：${level}
-安全與專業原則：
-- 模擬家長時要自然、貼近學校常見情況，不要突然跳出角色。
-- 情緒激動的家長可以表達不滿，但不要使用威脅、歧視或過度辱罵語句。
-- 不要編造真實學生資料，也不要要求輸入可識別學生的個資。
-- 不要假裝知道未提供的事實；遇到爭議鼓勵查證、釐清雙方觀點並依學校流程處理。
-- 教師回覆應兼顧同理、清楚說明、合作解決問題與專業界線，不應承諾無法確定的結果。
-操作規則：
-- action=start：只輸出家長第一句話，約 1–3 句，帶出情境即可。
-- action=reply：根據對話歷程，繼續以家長角色回覆，約 1–3 句，提出合理追問或回應，不要替教師作答。
-- action=analyze：不要再扮演家長。根據整段對話給教師回饋，使用以下結構：
-一、整體回饋（簡短）
-二、做得好的地方（列點）
-三、可以調整的地方（列點）
-四、溝通技巧評估（同理心、清楚表達、專業界線、合作解決問題，各以 1–5 分並說明）
-五、建議回覆示範（提供一段可實際參考的回覆）
-六、下一次練習重點（1–2 點）
-回饋具體、友善、不羞辱使用者；若對話資訊不足，明確說明無法判定的部分。`;
-
-    let task;
-    if (action === "start") {
-      task = "請開始這個情境，只回覆家長的第一句話。";
-    } else if (action === "reply") {
-      const transcript = history.slice(-16).filter(item => item && ["parent", "teacher"].includes(item.role) && typeof item.content === "string")
-        .map(item => `${item.role === "parent" ? "家長" : "老師"}：${item.content.slice(0, 3000)}`).join("\n");
-      task = `以下是目前對話，請以家長角色自然接續，只回覆家長的下一句話：\n${transcript}`;
-    } else {
-      const transcript = history.slice(-24).map(item =>
-        `${item && item.role === "parent" ? "家長" : "老師"}：${String(item?.content || "").slice(0, 2500)}`
-      ).join("\n");
-      task = "請分析以下練習對話：\n" + transcript;
-    }
-
-    const response = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL || "gemini-3.6-flash",
-      contents: task,
-      config: {
-        systemInstruction: system,
-        temperature: action === "analyze" ? 0.4 : 0.8,
-        maxOutputTokens: action === "analyze" ? 1300 : 350
-      }
-    });
-    const output = response.text?.trim();
-    if (!output) return res.status(502).json({ error: "AI 沒有產生文字，請再試一次。" });
-    res.json(action === "analyze" ? { analysis: output } : { message: output });
-  } catch (error) {
-    console.error("Gemini Simulation API error:", error.status || "", error.message || error);
-    res.status(500).json({ error: "Gemini AI 目前無法使用，請確認 Gemini API 金鑰、免費額度或稍後再試。" });
-  }
-});
-
-app.get("*", (req, res) => {
+// 首頁
+app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
+// 健康檢查：確認伺服器有啟動
+app.get("/api/health", (req, res) => {
+  res.json({
+    success: true,
+    provider: "Groq",
+    configured: Boolean(GROQ_API_KEY)
+  });
+});
+
+// 呼叫 Groq AI
+async function askGroq(messages) {
+  if (!GROQ_API_KEY) {
+    throw new Error(
+      "伺服器尚未設定 GROQ_API_KEY，請到 Render 的 Environment 設定。"
+    );
+  }
+
+  const response = await fetch(
+    "https://api.groq.com/openai/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages,
+        temperature: 0.7,
+        max_completion_tokens: 1200
+      })
+    }
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    console.error("Groq API error:", response.status, data);
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Groq API 金鑰或帳號權限有問題，請檢查 Render 設定。");
+    }
+
+    if (response.status === 429) {
+      throw new Error("目前已達 Groq 使用限制，請稍後再試。");
+    }
+
+    throw new Error(
+      data.error?.message || `Groq API 請求失敗（${response.status}）。`
+    );
+  }
+
+  const content = data.choices?.[0]?.message?.content;
+
+  if (!content) {
+    throw new Error("AI 沒有產生文字，請稍後再試。");
+  }
+
+  return content.trim();
+}
+
+function getSystemPrompt(scenario, tone, level) {
+  return `
+你是一位專業的國小親師溝通情境模擬教練。
+你要幫助教師練習和家長溝通，不是直接替教師解決所有問題。
+
+【情境】${scenario}
+【教師練習目標】${tone}
+【家長情緒程度】${level}
+
+規則：
+1. 扮演真實的家長，以自然、生活化的繁體中文對話。
+2. 家長的情緒、疑慮和反應要符合指定情境。
+3. 每次只回覆一段適當長度的家長發言，不要一次寫完整劇本。
+4. 不要代替教師回答，也不要跳出家長角色說教。
+5. 隨著教師的回覆，合理地追問、補充疑慮或逐漸緩和情緒。
+6. 情緒激動時可以表達不滿，但不要使用威脅或人身攻擊。
+7. 不可自行捏造已經發生的校園事實。
+8. 全程使用繁體中文。
+`;
+}
+
+function normalizeHistory(history) {
+  if (!Array.isArray(history)) return [];
+
+  return history
+    .filter(item =>
+      item &&
+      ["parent", "teacher"].includes(item.role) &&
+      typeof item.content === "string"
+    )
+    .slice(-20)
+    .map(item => ({
+      // 家長的發言是 AI assistant；老師的發言是 user
+      role: item.role === "parent" ? "assistant" : "user",
+      content: item.content.slice(0, 3000)
+    }));
+}
+
+// 親師溝通模擬 API
+app.post("/api/simulate", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const action = body.action;
+    const scenario = String(body.scenario || "一般親師溝通情境").slice(0, 1000);
+    const tone = String(body.tone || "理性溫和").slice(0, 100);
+    const level = String(body.level || "一般").slice(0, 100);
+    const history = normalizeHistory(body.history);
+
+    const systemPrompt = getSystemPrompt(scenario, tone, level);
+
+    if (action === "start") {
+      const message = await askGroq([
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content:
+            "現在開始情境模擬。請以家長的身分說出第一段話，清楚表達你的疑慮，讓教師可以開始練習。"
+        }
+      ]);
+
+      return res.json({ success: true, message });
+    }
+
+    if (action === "reply") {
+      if (!history.length) {
+        return res.status(400).json({
+          error: "目前沒有對話紀錄，請重新開始情境。"
+        });
+      }
+
+      const message = await askGroq([
+        { role: "system", content: systemPrompt },
+        ...history
+      ]);
+
+      return res.json({ success: true, message });
+    }
+
+    if (action === "analyze") {
+      const transcript = history
+        .map(item =>
+          `${item.role === "teacher" ? "老師" : "家長"}：${item.content}`
+        )
+        .join("\n");
+
+      if (!history.some(item => item.role === "teacher")) {
+        return res.status(400).json({
+          error: "請至少完成一次教師回覆，再進行分析。"
+        });
+      }
+
+      const analysis = await askGroq([
+        {
+          role: "system",
+          content: `
+你是一位親師溝通培訓講師。
+請針對以下教師與家長的模擬對話，以繁體中文提供具體、友善、可實際使用的回饋。
+
+請依序分析：
+一、同理與傾聽（25分）
+二、表達清楚程度（25分）
+三、專業界線與適切性（25分）
+四、合作解決問題（25分）
+
+每項給出分數和簡短理由，總分滿分100分。
+接著提供：
+【做得好的地方】
+【可以改進的地方】
+【建議回覆範例】
+【下一次練習重點】
+
+請根據實際對話評估，不要只給空泛稱讚。
+若資訊不足，請明確指出，不要自行捏造事實。
+`
+        },
+        {
+          role: "user",
+          content: `請分析以下模擬對話：\n\n${transcript}`
+        }
+      ]);
+
+      return res.json({ success: true, analysis });
+    }
+
+    return res.status(400).json({
+      error: "未知的操作，請重新整理頁面後再試。"
+    });
+
+  } catch (error) {
+    console.error("Simulation API error:", error.message);
+
+    return res.status(500).json({
+      error: error.message || "AI 服務目前無法使用，請稍後再試。"
+    });
+  }
+});
+
 app.listen(PORT, () => {
-  console.log(`親師溝通情境模擬練習器已啟動，Port: ${PORT}`);
+  console.log("親師溝通情境模擬練習器已啟動。");
+  console.log("AI 服務：Groq");
+  console.log("模型：", GROQ_MODEL);
+  console.log("API 金鑰是否設定：", Boolean(GROQ_API_KEY));
 });
