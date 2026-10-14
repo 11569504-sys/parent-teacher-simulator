@@ -1,22 +1,22 @@
 require("dotenv").config();
 const express = require("express");
 const path = require("path");
-const OpenAI = require("openai");
+const { GoogleGenAI } = require("@google/genai");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
-const client = process.env.OPENAI_API_KEY
-  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+const ai = process.env.GEMINI_API_KEY
+  ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
   : null;
 
 app.post("/api/simulate", async (req, res) => {
   try {
-    if (!client) {
+    if (!ai) {
       return res.status(500).json({
-        error: "伺服器尚未設定 OPENAI_API_KEY。請在 Render 的 Environment 設定 API 金鑰。"
+        error: "伺服器尚未設定 GEMINI_API_KEY。請在 Render 的 Environment 設定 Gemini API 金鑰。"
       });
     }
 
@@ -47,34 +47,35 @@ app.post("/api/simulate", async (req, res) => {
 六、下一次練習重點（1–2 點）
 回饋具體、友善、不羞辱使用者；若對話資訊不足，明確說明無法判定的部分。`;
 
-    const messages = [{ role: "system", content: system }];
+    let task;
     if (action === "start") {
-      messages.push({ role: "user", content: "請開始這個情境，只回覆家長的第一句話。" });
+      task = "請開始這個情境，只回覆家長的第一句話。";
     } else if (action === "reply") {
-      for (const item of history.slice(-16)) {
-        if (!item || !["parent", "teacher"].includes(item.role) || typeof item.content !== "string") continue;
-        messages.push({ role: item.role === "parent" ? "assistant" : "user", content: item.content.slice(0, 3000) });
-      }
-      messages.push({ role: "user", content: "請以家長角色自然接續對話，只回覆家長的下一句話。" });
+      const transcript = history.slice(-16).filter(item => item && ["parent", "teacher"].includes(item.role) && typeof item.content === "string")
+        .map(item => `${item.role === "parent" ? "家長" : "老師"}：${item.content.slice(0, 3000)}`).join("\n");
+      task = `以下是目前對話，請以家長角色自然接續，只回覆家長的下一句話：\n${transcript}`;
     } else {
-      const transcript = history.slice(-24).map(x =>
-        `${x.role === "parent" ? "家長" : "老師"}：${String(x.content || "").slice(0, 2500)}`
+      const transcript = history.slice(-24).map(item =>
+        `${item && item.role === "parent" ? "家長" : "老師"}：${String(item?.content || "").slice(0, 2500)}`
       ).join("\n");
-      messages.push({ role: "user", content: "請分析以下練習對話：\n" + transcript });
+      task = "請分析以下練習對話：\n" + transcript;
     }
 
-    const completion = await client.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-      messages,
-      temperature: action === "analyze" ? 0.4 : 0.8,
-      max_tokens: action === "analyze" ? 1300 : 350
+    const response = await ai.models.generateContent({
+      model: process.env.GEMINI_MODEL || "gemini-3.6-flash",
+      contents: task,
+      config: {
+        systemInstruction: system,
+        temperature: action === "analyze" ? 0.4 : 0.8,
+        maxOutputTokens: action === "analyze" ? 1300 : 350
+      }
     });
-    const output = completion.choices?.[0]?.message?.content?.trim();
+    const output = response.text?.trim();
     if (!output) return res.status(502).json({ error: "AI 沒有產生文字，請再試一次。" });
     res.json(action === "analyze" ? { analysis: output } : { message: output });
   } catch (error) {
-    console.error("Simulation API error:", error.message);
-    res.status(500).json({ error: "AI 服務目前無法使用，請檢查 API 金鑰、帳單額度或稍後再試。" });
+    console.error("Gemini Simulation API error:", error.status || "", error.message || error);
+    res.status(500).json({ error: "Gemini AI 目前無法使用，請確認 Gemini API 金鑰、免費額度或稍後再試。" });
   }
 });
 
@@ -83,5 +84,5 @@ app.get("*", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`親師溝通情境模擬練習器已啟動：http://localhost:${PORT}`);
+  console.log(`親師溝通情境模擬練習器已啟動，Port: ${PORT}`);
 });
